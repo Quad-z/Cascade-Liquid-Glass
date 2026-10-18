@@ -2,14 +2,18 @@
     LiquidGlass.luau
     ================
     A high-performance Liquid Glass & Isolated Frosted Glass Blur library for Roblox.
+    
     Features:
     - 9-Slice Planar Glass Refraction (Corner & Edge lenses)
+    - Enlarged Refraction Rim (Customizable RimScale)
     - Local Isolated Frosted Glass Blur (DepthOfField with Zero Screen Bleed)
     - Dynamic Screen Tracking (Handles scaling, movement, and camera projections)
+    - Optional macOS Jelly Drag Physics (Damped harmonic oscillator)
     - Clean lifecycle management (Attach, Detach, Enable/Disable)
 
     @author quadraz & Antigravity
     @license MIT
+    @repository https://github.com/Quad-z/Cascade-Liquid-Glass
 ]=]
 
 local Players = game:GetService("Players")
@@ -22,17 +26,61 @@ local Camera = Workspace.CurrentCamera
 local DEPTH = 0.05
 local ROTATION_OFFSET = CFrame.Angles(0, math.rad(-90), 0)
 
+-- Analytical Spring Class for Fluid Jelly Physics
+local Spring = {}
+Spring.__index = Spring
+
+function Spring.new(initial: number, frequency: number?, damping: number?)
+    local self = setmetatable({}, Spring)
+    self.Position = initial or 0
+    self.Velocity = 0
+    self.Target = initial or 0
+    self.Frequency = frequency or 18
+    self.Damping = damping or 0.65
+    return self
+end
+
+function Spring:Step(dt: number): number
+    dt = math.clamp(dt, 0, 0.05)
+    local x0 = self.Position - self.Target
+    local v0 = self.Velocity
+    local w0 = self.Frequency
+    local z = self.Damping
+
+    if z < 0.999 then
+        local wd = w0 * math.sqrt(1 - z * z)
+        local decay = math.exp(-z * w0 * dt)
+        local cosTerm = math.cos(wd * dt)
+        local sinTerm = math.sin(wd * dt)
+        local c1 = x0
+        local c2 = (v0 + z * w0 * x0) / wd
+
+        self.Position = self.Target + decay * (c1 * cosTerm + c2 * sinTerm)
+        self.Velocity = decay * (v0 * cosTerm - (c1 * wd + (z * w0 / wd) * (v0 + z * w0 * x0)) * sinTerm)
+    else
+        local decay = math.exp(-w0 * dt)
+        local c1 = x0
+        local c2 = v0 + w0 * x0
+        self.Position = self.Target + decay * (c1 + c2 * dt)
+        self.Velocity = decay * (v0 - w0 * c2 * dt)
+    end
+    return self.Position
+end
+
 local LiquidGlass = {}
 LiquidGlass.__index = LiquidGlass
 
--- Default configuration preset (macOS Dark Glass)
+-- Default configuration preset (macOS Liquid Glass)
 LiquidGlass.DefaultConfig = {
-    CornerRadius = 26,
-    CornerRefraction = 3.5,
-    EdgeRefraction = 2.9,
-    FrostBlur = 0.85,
-    HighlightBoost = 0.98,
-    BlurKernelInset = 36,
+    CornerRadius = 15,
+    CornerRefraction = 6.0,
+    RimScale = 2.3,
+    FrostBlur = 0.25,
+    EdgeRefraction = 1.1,
+    HighlightBoost = 1.00,
+    BlurKernelInset = 32,
+    WindowTransparency = 0.60,
+    JellyPhysics = false,
     Enabled = true,
 }
 
@@ -71,9 +119,9 @@ function LiquidGlass.attach(guiObject: GuiObject, userConfig)
 
     local templateContainer = LiquidGlass.ensureAssets()
 
-    -- 1. Isolated DepthOfField effect for local frost blur
+    -- 1. Isolated DepthOfField effect for local frost blur (zero screen bleed)
     self.Dof = Instance.new("DepthOfFieldEffect")
-    self.Dof.Name = "LiquidGlass_DOF_" .. guiObject.Name
+    self.Dof.Name = "Cascade_LiquidFrostDOF"
     self.Dof.FarIntensity = 0       -- Guaranteed: Screen around window is NEVER blurred
     self.Dof.FocusDistance = 0.15   -- Near camera lens
     self.Dof.InFocusRadius = 0
@@ -144,9 +192,16 @@ function LiquidGlass.attach(guiObject: GuiObject, userConfig)
         BottomRight = makeRimPart("Corner", true, CFrame.Angles(0, 0, math.rad(-90))),
     }
 
+    -- Spring physics
+    self.TiltSpring = Spring.new(0, 16, 0.68)
+    self.PitchSpring = Spring.new(0, 22, 0.72)
+    self.RollSpring = Spring.new(0, 22, 0.72)
+    self.LastBodyPos = guiObject.AbsolutePosition
+    self.SmoothedVelocity = Vector2.zero
+
     -- 3. Render loop
-    self.RenderConn = RunService.RenderStepped:Connect(function()
-        self:Update()
+    self.RenderConn = RunService.RenderStepped:Connect(function(dt)
+        self:Update(dt)
     end)
 
     -- Auto-cleanup on GuiObject destruction
@@ -157,7 +212,8 @@ function LiquidGlass.attach(guiObject: GuiObject, userConfig)
     return self
 end
 
-function LiquidGlass:Update()
+function LiquidGlass:Update(dt)
+    dt = dt or 0.016
     local gui = self.GuiObject
     if not gui or not gui.Parent then
         self:Hide()
@@ -178,7 +234,30 @@ function LiquidGlass:Update()
         self:Show()
     end
 
-    local rad = math.clamp(self.Config.CornerRadius, 4, math.min(size.X, size.Y) / 2)
+    -- Physics wobble handling
+    if self.Config.JellyPhysics then
+        local deltaPos = pos - self.LastBodyPos
+        self.LastBodyPos = pos
+
+        local instantVel = (dt > 0.0001) and (deltaPos / dt) or Vector2.zero
+        self.SmoothedVelocity = self.SmoothedVelocity:Lerp(instantVel, math.clamp(dt * 14, 0, 1))
+
+        local targetTilt = math.clamp(-self.SmoothedVelocity.X * 0.010, -5, 5)
+        local targetPitch = math.clamp(self.SmoothedVelocity.Y * 0.012, -4, 4)
+        local targetRoll = math.clamp(-self.SmoothedVelocity.X * 0.012, -4, 4)
+
+        self.TiltSpring.Target = targetTilt
+        self.PitchSpring.Target = targetPitch
+        self.RollSpring.Target = targetRoll
+
+        gui.Rotation = self.TiltSpring:Step(dt)
+    else
+        gui.Rotation = 0
+        self.SmoothedVelocity = Vector2.zero
+        self.LastBodyPos = pos
+    end
+
+    local rad = math.clamp(self.Config.CornerRadius, 6, math.min(size.X, size.Y) / 2)
     local uiCorner = gui:FindFirstChildOfClass("UICorner")
     if uiCorner and uiCorner.CornerRadius.Offset ~= rad then
         uiCorner.CornerRadius = UDim.new(0, rad)
@@ -186,6 +265,11 @@ function LiquidGlass:Update()
 
     local camCF = Camera:GetRenderCFrame()
     local guiRotCF = CFrame.Angles(0, 0, math.rad(-gui.AbsoluteRotation))
+    local dynamicTiltCF = CFrame.Angles(
+        math.rad(self.PitchSpring.Position),
+        math.rad(self.RollSpring.Position),
+        0
+    )
 
     local centerScreenPos = pos + (size / 2)
     local centerWorldPos = getPlanePos(centerScreenPos.X, centerScreenPos.Y)
@@ -197,15 +281,20 @@ function LiquidGlass:Update()
     local worldW = (rightEdge - leftEdge).Magnitude
     local worldH = (topEdge - bottomEdge).Magnitude
 
-    local relRadX = rad / size.X
-    local relRadY = rad / size.Y
-    local innerW = math.max(0.0001, (size.X - 2 * rad) / size.X)
-    local innerH = math.max(0.0001, (size.Y - 2 * rad) / size.Y)
+    local rimScale = math.clamp(self.Config.RimScale or 1.0, 1.0, 4.0)
+    local cornerPxX = rad
+    local cornerPxY = rad
+    local relCornerX = cornerPxX / size.X
+    local relCornerY = cornerPxY / size.Y
 
-    local diamX = relRadX
-    local diamY = relRadY
-    local halfDiamX = diamX / 2
-    local halfDiamY = diamY / 2
+    local edgePxX = math.clamp(rad * rimScale, rad, size.X * 0.40)
+    local edgePxY = math.clamp(rad * rimScale, rad, size.Y * 0.40)
+    local relEdgeX = edgePxX / size.X
+    local relEdgeY = edgePxY / size.Y
+
+    local innerW = math.max(0.0001, (size.X - 2 * edgePxX) / size.X)
+    local innerH = math.max(0.0001, (size.Y - 2 * edgePxY) / size.Y)
+    local meshDepth = 0.001 + 0.002 * rimScale
 
     -- Update transparencies
     for _, edge in pairs(self.Edges) do
@@ -223,43 +312,43 @@ function LiquidGlass:Update()
         local worldOffset = (camCF.RightVector * rotatedOffset.X) + (camCF.UpVector * rotatedOffset.Y)
 
         if item.SwapAxes then
-            item.Part.Size = Vector3.new(0.001, relSizeX * worldW, relSizeY * worldH)
+            item.Part.Size = Vector3.new(meshDepth, relSizeX * worldW, relSizeY * worldH)
         else
-            item.Part.Size = Vector3.new(0.001, relSizeY * worldH, relSizeX * worldW)
+            item.Part.Size = Vector3.new(meshDepth, relSizeY * worldH, relSizeX * worldW)
         end
-        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * item.LocalRot * ROTATION_OFFSET
+        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * dynamicTiltCF * item.LocalRot * ROTATION_OFFSET
     end
 
-    -- Position corners (strictly planar, zero protrusion)
+    -- Position corners
     local function positionCorner(item, relX, relY)
         local localOffset = Vector3.new(relX * worldW, -relY * worldH, 0)
         local rotatedOffset = guiRotCF * localOffset
         local worldOffset = (camCF.RightVector * rotatedOffset.X) + (camCF.UpVector * rotatedOffset.Y)
 
         if item.SwapAxes then
-            item.Part.Size = Vector3.new(0.001, diamX * worldW, diamY * worldH)
+            item.Part.Size = Vector3.new(meshDepth, relCornerX * worldW, relCornerY * worldH)
         else
-            item.Part.Size = Vector3.new(0.001, diamY * worldH, diamX * worldW)
+            item.Part.Size = Vector3.new(meshDepth, relCornerY * worldH, relCornerX * worldW)
         end
-        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * item.LocalRot * ROTATION_OFFSET
+        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * dynamicTiltCF * item.LocalRot * ROTATION_OFFSET
     end
 
-    positionEdge(self.Edges.Top, 0, -0.5 + (relRadY / 2), innerW, relRadY)
-    positionEdge(self.Edges.Bottom, 0, 0.5 - (relRadY / 2), innerW, relRadY)
-    positionEdge(self.Edges.Left, -0.5 + (relRadX / 2), 0, relRadX, innerH)
-    positionEdge(self.Edges.Right, 0.5 - (relRadX / 2), 0, relRadX, innerH)
+    positionEdge(self.Edges.Top,    0,                     -0.5 + (relEdgeY / 2),  innerW,   relEdgeY)
+    positionEdge(self.Edges.Bottom, 0,                      0.5 - (relEdgeY / 2),  innerW,   relEdgeY)
+    positionEdge(self.Edges.Left,  -0.5 + (relEdgeX / 2),  0,                     relEdgeX, innerH)
+    positionEdge(self.Edges.Right,  0.5 - (relEdgeX / 2),  0,                     relEdgeX, innerH)
 
-    positionCorner(self.Corners.TopLeft, -0.5 + halfDiamX, -0.5 + halfDiamY)
-    positionCorner(self.Corners.TopRight, 0.5 - halfDiamX, -0.5 + halfDiamY)
-    positionCorner(self.Corners.BottomLeft, -0.5 + halfDiamX, 0.5 - halfDiamY)
-    positionCorner(self.Corners.BottomRight, 0.5 - halfDiamX, 0.5 - halfDiamY)
+    positionCorner(self.Corners.TopLeft,     -0.5 + (relCornerX / 2), -0.5 + (relCornerY / 2))
+    positionCorner(self.Corners.TopRight,     0.5 - (relCornerX / 2), -0.5 + (relCornerY / 2))
+    positionCorner(self.Corners.BottomLeft,  -0.5 + (relCornerX / 2),  0.5 - (relCornerY / 2))
+    positionCorner(self.Corners.BottomRight,  0.5 - (relCornerX / 2),  0.5 - (relCornerY / 2))
 
-    -- Center Frost plane with blur convolution kernel inset
-    local insetPixels = self.Config.BlurKernelInset
+    -- Center Frost plane
+    local insetPixels = math.max(self.Config.BlurKernelInset, math.max(edgePxX, edgePxY))
     local frostW = math.max(0.001, (size.X - insetPixels) / size.X * worldW)
     local frostH = math.max(0.001, (size.Y - insetPixels) / size.Y * worldH)
     self.CenterFrostPart.Size = Vector3.new(frostW, frostH, 0.001)
-    self.CenterFrostPart.CFrame = CFrame.new(centerWorldPos) * camCF.Rotation * guiRotCF
+    self.CenterFrostPart.CFrame = CFrame.new(centerWorldPos) * camCF.Rotation * guiRotCF * dynamicTiltCF
 end
 
 function LiquidGlass:Hide()
@@ -278,7 +367,7 @@ end
 
 function LiquidGlass:SetEnabled(enabled: boolean)
     self.Config.Enabled = enabled
-    self:Update()
+    self:Update(0)
 end
 
 function LiquidGlass:Destroy()
