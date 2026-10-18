@@ -1,34 +1,37 @@
 --[[
-    Cascade UI + Authentic macOS Liquid Glass (Unified Frosted Glass)
-    ==================================================================
-    - Unified Translucency: Completely removed the dark sidebar block.
-      The entire window is one seamless, unified pane of frosted Liquid Glass.
-    - Strict Zero-Bleed: Corner refractions stay 100% inside the 26px rounded corners.
-    - Local Frosted Glass: Local DepthOfField under the window only (no screen blur).
-    - Subtle 1px Apple border stroke.
-    - macOS tab transitions.
-    - Normal window drag (no tilt).
-    - Clean minimize and reset handling.
+    Cascade UI + Настоящее жидкое стекло macOS (Русская версия)
+    ===========================================================
+    Пример подключения и использования библиотеки LiquidGlass напрямую
+    из официального репозитория на GitHub:
+    https://raw.githubusercontent.com/Quad-z/Cascade-Liquid-Glass/refs/heads/main/src/LiquidGlass.luau
+
+    Возможности:
+    - Модульность: Загрузка LiquidGlass напрямую из исходников GitHub
+    - Аутентичная темная тема macOS Vibrancy (полупрозрачное обсидиановое стекло)
+    - Увеличенная рамка преломления (RimScale)
+    - Бесшовное 9-slice выравнивание по углам и граням
+    - Локальный матовый блюр (DepthOfField изолирован строго под окном)
+    - Плавные анимации переключения вкладок
+    - Устойчивость к респавну персонажа
+    
+    MIT License | GitHub Ready
 ]]
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local GuiService = game:GetService("GuiService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- 1. CLEANUP PREVIOUS INSTANCES
+-- 1. ОЧИСТКА ПРЕДЫДУЩИХ ЭКЗЕМПЛЯРОВ
 local function cleanup()
     local hui = (gethui and gethui()) or game:GetService("CoreGui")
     for _, name in ipairs({"Cascade", "IdealLiquidStudio", "CascadeTest", "FrostGUI"}) do
         local g = hui:FindFirstChild(name)
         if g then g:Destroy() end
-        local pg = LocalPlayer.PlayerGui:FindFirstChild(name)
+        local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild(name)
         if pg then pg:Destroy() end
     end
     for _, name in ipairs({"LiquidGlassObjects", "LiquidRimModel", "Cascade_Liquid_Root", "AcrylicParts"}) do
@@ -45,38 +48,11 @@ local function cleanup()
 end
 cleanup()
 
--- 2. ENSURE LIQUID GLASS HANDLER ASSETS
-local lghAsset = ReplicatedStorage:FindFirstChild("LiquidGlassHandler")
-if not lghAsset then
-    local loaded = game:GetObjects("rbxassetid://78675735649311")[1]
-    loaded.Name = "LiquidGlassHandler"
-    loaded.Parent = ReplicatedStorage
-    lghAsset = loaded
-end
-local templateContainer = lghAsset.Overlay
+-- 2. ПОДКЛЮЧЕНИЕ БИБЛИОТЕКИ LIQUID GLASS ИЗ ИСХОДНИКОВ GITHUB
+local LIB_URL = "https://raw.githubusercontent.com/Quad-z/Cascade-Liquid-Glass/refs/heads/main/src/LiquidGlass.luau"
+local LiquidGlass = loadstring(game:HttpGet(LIB_URL))()
 
--- 3. USER'S PRESET
-local Settings = {
-    CornerRefraction = 3.5,       -- User setting
-    CornerRadius = 26,           -- Границы скруглений больше (26 px)
-    EdgeRefraction = 2.9,        -- User setting
-    HighlightBoost = 0.98,       -- User setting
-    FrostBlur = 0.85,            -- User setting
-    WindowTransparency = 0.38,   -- Чистое единое стекло (прозрачность 0.38)
-    BlurKernelInset = 36,        -- Inset to prevent DOF blur from bleeding out of window
-    Enabled = true,
-}
-
--- 4. LOCAL FROST DEPTH OF FIELD
-local dof = Instance.new("DepthOfFieldEffect")
-dof.Name = "Cascade_LiquidFrostDOF"
-dof.FarIntensity = 0        -- Rest of world is NEVER blurred
-dof.FocusDistance = 0.15    -- Near camera lens
-dof.InFocusRadius = 0
-dof.NearIntensity = Settings.FrostBlur
-dof.Parent = Lighting
-
--- 5. LOAD CASCADE UI (Official Release, 100% UNTOUCHED)
+-- 3. ИНИЦИАЛИЗАЦИЯ CASCADE UI
 local cascade = loadstring(game:HttpGet("https://github.com/cascadeui/Cascade/releases/download/v1.4.0/dist.luau"))()
 
 local app = cascade.New({
@@ -87,7 +63,7 @@ local app = cascade.New({
 
 local window = app:Window({
     Title = "Cascade",
-    Subtitle = "Liquid Glass • macOS",
+    Subtitle = "Жидкое стекло • macOS Edition",
     Size = UDim2.fromOffset(780, 490),
     UIBlur = false,
 })
@@ -95,18 +71,13 @@ local window = app:Window({
 local rawBody = window.Structures.Body
 local body = rawBody.__instance or rawBody
 
--- Prevent UI from resetting on player death
+-- Защита от сброса при смерти персонажа
 local screenGui = body:FindFirstAncestorOfClass("ScreenGui")
 if screenGui then
     screenGui.ResetOnSpawn = false
 end
 
-local uiCorner = body:FindFirstChildOfClass("UICorner")
-if uiCorner then
-    uiCorner.CornerRadius = UDim.new(0, Settings.CornerRadius)
-end
-
--- Subtle macOS UI Stroke border
+-- Тонкий спекулярный кант macOS
 local borderStroke = body:FindFirstChild("LiquidGlassStroke") or Instance.new("UIStroke")
 borderStroke.Name = "LiquidGlassStroke"
 borderStroke.Color = Color3.fromRGB(255, 255, 255)
@@ -114,18 +85,19 @@ borderStroke.Transparency = 0.82
 borderStroke.Thickness = 1.2
 borderStroke.Parent = body
 
--- 100% UNIFIED TRANSLUCENT OBSIDIAN GLASS (NO BLACK SLAB ON SIDEBAR)
+-- Стилизация обсидианового полупрозрачного стекла
 local UNIFIED_COLOR = Color3.fromRGB(14, 17, 24)
+local windowTransparency = 0.60
 
 local function applyTranslucency()
     body.BackgroundColor3 = UNIFIED_COLOR
-    body.BackgroundTransparency = Settings.WindowTransparency
+    body.BackgroundTransparency = windowTransparency
 
     for _, desc in ipairs(body:GetDescendants()) do
         if desc:IsA("GuiObject") then
             if desc.Name == "Sidebar" or desc.Name == "ContentBody" or desc.Name == "Toolbar" or desc.Name:find("CornerClip") then
                 desc.BackgroundColor3 = UNIFIED_COLOR
-                desc.BackgroundTransparency = 1 -- fully transparent to make window 100% unified
+                desc.BackgroundTransparency = 1
             elseif desc.Name == "Top" or desc.Name == "Bottom" then
                 desc.BackgroundTransparency = 1
             elseif desc.Name == "Form" then
@@ -148,211 +120,30 @@ body.DescendantAdded:Connect(function(desc)
                 desc.BackgroundTransparency = 1
             elseif desc.Name == "Top" or desc.Name == "Bottom" then
                 desc.BackgroundTransparency = 1
-            elseif desc.Name == "Form" then
-                desc.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                desc.BackgroundTransparency = 0.95
-            elseif desc.Name == "Separator" then
-                desc.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                desc.BackgroundTransparency = 0.90
             end
         end
     end)
 end)
 
--- 6. 3D REFRACTION MESHES (STRICT PLANAR ALIGNMENT - NO OUT-OF-BOUNDS PROTRUSION)
-local parentFolder = Instance.new("Folder")
-parentFolder.Name = "LiquidGlassObjects"
-parentFolder.Parent = Camera
+-- 4. НАКЛАДЫВАЕМ ЭФФЕКТ СТЕКЛА ЧЕРЕЗ БИБЛИОТЕКУ LIQUID GLASS
+local glass = LiquidGlass.attach(body, {
+    CornerRadius        = 15,    -- Радиус скругления углов (px)
+    CornerRefraction    = 6.0,   -- Сила оптического искажения по углам
+    RimScale            = 2.3,   -- Масштаб толщины фаски преломления
+    FrostBlur           = 0.25,  -- Локальный матовый блюр под окном
+    EdgeRefraction      = 1.1,   -- Преломление вдоль граней окна
+    BlurKernelInset     = 32,    -- Защита от ореола блюра вокруг окна
+    WindowTransparency  = windowTransparency,
+    HighlightBoost      = 1.00,  -- Яркость спекулярного канта
+    JellyPhysics        = false, -- Инерционное покачивание окна при перетаскивании
+    Enabled             = true,
+})
 
-local rimModel = Instance.new("Model")
-rimModel.Name = "LiquidRimModel"
-rimModel.Parent = parentFolder
-
-local highlight = Instance.new("Highlight")
-highlight.Name = "LiquidHighlight"
-highlight.FillColor = Color3.fromRGB(0, 0, 0)
-highlight.FillTransparency = Settings.HighlightBoost
-highlight.OutlineTransparency = 1
-highlight.Parent = rimModel
-
--- Center Frost Part (with blur kernel inset to eliminate bleeding)
-local centerFrostPart = Instance.new("Part")
-centerFrostPart.Name = "CenterFrostPlane"
-centerFrostPart.Material = Enum.Material.Glass
-centerFrostPart.Color = Color3.fromRGB(240, 248, 255)
-centerFrostPart.Transparency = 0.98
-centerFrostPart.Reflectance = 0
-centerFrostPart.CastShadow = false
-centerFrostPart.CanCollide = false
-centerFrostPart.CanTouch = false
-centerFrostPart.CanQuery = false
-centerFrostPart.Anchored = true
-centerFrostPart.Parent = parentFolder
-
-local DEPTH = 0.05
-local rotationOffset = CFrame.Angles(0, math.rad(-90), 0)
-
-local function makeRimPart(templateName, swapAxes, localRot)
-    local p = templateContainer:FindFirstChild(templateName):Clone()
-    p.Material = Enum.Material.Glass
-    p.Color = Color3.fromRGB(0, 0, 0)
-    p.Transparency = Settings.EdgeRefraction
-    p.CastShadow = false
-    p.CanCollide = false
-    p.CanQuery = false
-    p.CanTouch = false
-    p.Anchored = true
-    p.Parent = rimModel
-    return {
-        Part = p,
-        SwapAxes = swapAxes,
-        LocalRot = localRot or CFrame.identity,
-    }
-end
-
-local edgeTop = makeRimPart("Edge", false, CFrame.Angles(0, 0, 0))
-local edgeBottom = makeRimPart("Edge", false, CFrame.Angles(0, 0, math.rad(180)))
-local edgeLeft = makeRimPart("Edge", true, CFrame.Angles(0, 0, math.rad(90)))
-local edgeRight = makeRimPart("Edge", true, CFrame.Angles(0, 0, math.rad(-90)))
-
-local cornerTL = makeRimPart("Corner", true, CFrame.Angles(0, 0, math.rad(90)))
-local cornerTR = makeRimPart("Corner", false, CFrame.Angles(0, 0, 0))
-local cornerBL = makeRimPart("Corner", false, CFrame.Angles(0, 0, math.rad(180)))
-local cornerBR = makeRimPart("Corner", true, CFrame.Angles(0, 0, math.rad(-90)))
-
-local function getPlanePos(pixelX, pixelY)
-    local ray = Camera:ScreenPointToRay(pixelX, pixelY)
-    local camCF = Camera:GetRenderCFrame()
-    local dist = DEPTH / ray.Direction:Dot(camCF.LookVector)
-    return ray.Origin + ray.Direction * dist
-end
-
--- 7. CLEAN RENDERING LOOP
-local function updateLiquidGlass()
-    local size = body.AbsoluteSize
-    local pos = body.AbsolutePosition
-
-    local scaleObj = rawBody.Parent and rawBody.Parent:FindFirstChildOfClass("UIScale")
-    local isMinimized = (window.Minimized == true)
-        or (not Settings.Enabled)
-        or (not body or not body.Parent)
-        or (not body.Visible)
-        or (size.X < 80 or size.Y < 80)
-        or (scaleObj and scaleObj.Scale < 0.1)
-
-    if isMinimized then
-        rimModel.Parent = nil
-        centerFrostPart.Transparency = 1
-        dof.NearIntensity = 0
-        return
-    else
-        if rimModel.Parent ~= parentFolder then rimModel.Parent = parentFolder end
-        centerFrostPart.Transparency = (Settings.FrostBlur > 0.02) and 0.98 or 1.0
-        dof.NearIntensity = Settings.FrostBlur
-    end
-
-    local rad = math.clamp(Settings.CornerRadius, 6, math.min(size.X, size.Y) / 2)
-    if uiCorner and uiCorner.CornerRadius.Offset ~= rad then
-        uiCorner.CornerRadius = UDim.new(0, rad)
-    end
-
-    local camCF = Camera:GetRenderCFrame()
-    local guiRotCF = CFrame.Angles(0, 0, math.rad(-body.AbsoluteRotation))
-
-    local centerScreenPos = pos + (size / 2)
-    local centerWorldPos = getPlanePos(centerScreenPos.X, centerScreenPos.Y)
-    local rightEdge = getPlanePos(centerScreenPos.X + (size.X / 2), centerScreenPos.Y)
-    local leftEdge = getPlanePos(centerScreenPos.X - (size.X / 2), centerScreenPos.Y)
-    local topEdge = getPlanePos(centerScreenPos.X, centerScreenPos.Y - (size.Y / 2))
-    local bottomEdge = getPlanePos(centerScreenPos.X, centerScreenPos.Y + (size.Y / 2))
-
-    local worldW = (rightEdge - leftEdge).Magnitude
-    local worldH = (topEdge - bottomEdge).Magnitude
-
-    local relRadX = rad / size.X
-    local relRadY = rad / size.Y
-    local innerW = math.max(0.0001, (size.X - 2 * rad) / size.X)
-    local innerH = math.max(0.0001, (size.Y - 2 * rad) / size.Y)
-
-    -- Planar corner dimensions: strictly aligned within the window corner radius
-    local diamX = relRadX
-    local diamY = relRadY
-    local halfDiamX = diamX / 2
-    local halfDiamY = diamY / 2
-
-    -- Update Transparencies & Highlight
-    cornerTL.Part.Transparency = Settings.CornerRefraction
-    cornerTR.Part.Transparency = Settings.CornerRefraction
-    cornerBL.Part.Transparency = Settings.CornerRefraction
-    cornerBR.Part.Transparency = Settings.CornerRefraction
-
-    edgeTop.Part.Transparency = Settings.EdgeRefraction
-    edgeBottom.Part.Transparency = Settings.EdgeRefraction
-    edgeLeft.Part.Transparency = Settings.EdgeRefraction
-    edgeRight.Part.Transparency = Settings.EdgeRefraction
-
-    highlight.FillTransparency = Settings.HighlightBoost
-
-    -- 1. Position Edges with SwapAxes
-    local function positionEdge(item, relX, relY, relSizeX, relSizeY)
-        local localOffset = Vector3.new(relX * worldW, -relY * worldH, 0)
-        local rotatedOffset = guiRotCF * localOffset
-        local worldOffset = (camCF.RightVector * rotatedOffset.X) + (camCF.UpVector * rotatedOffset.Y)
-
-        if item.SwapAxes then
-            item.Part.Size = Vector3.new(0.001, relSizeX * worldW, relSizeY * worldH)
-        else
-            item.Part.Size = Vector3.new(0.001, relSizeY * worldH, relSizeX * worldW)
-        end
-        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * item.LocalRot * rotationOffset
-    end
-
-    -- 2. Position Corners with Planar Alignment (No out-of-plane tilt, guaranteeing zero protrusion)
-    local function positionCorner(item, relX, relY)
-        local localOffset = Vector3.new(relX * worldW, -relY * worldH, 0)
-        local rotatedOffset = guiRotCF * localOffset
-        local worldOffset = (camCF.RightVector * rotatedOffset.X) + (camCF.UpVector * rotatedOffset.Y)
-
-        if item.SwapAxes then
-            item.Part.Size = Vector3.new(0.001, diamX * worldW, diamY * worldH)
-        else
-            item.Part.Size = Vector3.new(0.001, diamY * worldH, diamX * worldW)
-        end
-        item.Part.CFrame = CFrame.new(centerWorldPos + worldOffset) * camCF.Rotation * guiRotCF * item.LocalRot * rotationOffset
-    end
-
-    positionEdge(edgeTop, 0, -0.5 + (relRadY / 2), innerW, relRadY)
-    positionEdge(edgeBottom, 0, 0.5 - (relRadY / 2), innerW, relRadY)
-    positionEdge(edgeLeft, -0.5 + (relRadX / 2), 0, relRadX, innerH)
-    positionEdge(edgeRight, 0.5 - (relRadX / 2), 0, relRadX, innerH)
-
-    positionCorner(cornerTL, -0.5 + halfDiamX, -0.5 + halfDiamY)
-    positionCorner(cornerTR, 0.5 - halfDiamX, -0.5 + halfDiamY)
-    positionCorner(cornerBL, -0.5 + halfDiamX, 0.5 - halfDiamY)
-    positionCorner(cornerBR, 0.5 - halfDiamX, 0.5 - halfDiamY)
-
-    -- 3. Center Frost Part with BlurKernelInset:
-    local insetPixels = Settings.BlurKernelInset
-    local frostW = math.max(0.001, (size.X - insetPixels) / size.X * worldW)
-    local frostH = math.max(0.001, (size.Y - insetPixels) / size.Y * worldH)
-    centerFrostPart.Size = Vector3.new(frostW, frostH, 0.001)
-    centerFrostPart.CFrame = CFrame.new(centerWorldPos) * camCF.Rotation * guiRotCF
-end
-
-local renderConn = RunService.RenderStepped:Connect(updateLiquidGlass)
-
-body.Destroying:Connect(function()
-    if renderConn then renderConn:Disconnect() end
-    dof:Destroy()
-    rimModel:Destroy()
-    centerFrostPart:Destroy()
-end)
-
--- 8. macOS-STYLE SMOOTH TAB TRANSITIONS (Safely animated on content switch)
+-- 5. ПЛАВНЫЕ ПЕРЕХОДЫ ВКЛАДОК
 local contentContainer = window.__container or (body:FindFirstChild("ContentBody") and body.ContentBody:FindFirstChild("Content"))
 if contentContainer then
     contentContainer.ChildAdded:Connect(function(child)
-        if child:IsA("GuiObject") and child.Name:find("Form") or child.Name:find("Page") or child:IsA("ScrollingFrame") then
+        if child:IsA("GuiObject") and (child.Name:find("Form") or child.Name:find("Page") or child:IsA("ScrollingFrame")) then
             local originalPos = child.Position
             child.Position = originalPos + UDim2.fromOffset(16, 0)
             
@@ -364,9 +155,9 @@ if contentContainer then
     end)
 end
 
--- 9. BUILD CASCADE TABS & NATIVE STEPPERS
+-- 6. СОЗДАНИЕ ВКЛАДОК И СТЕППЕРОВ
 local section = window:Section({
-    Title = "Liquid Glass",
+    Title = "Жидкое стекло",
     Disclosure = false,
 })
 
@@ -376,15 +167,15 @@ local tabRefraction = section:Tab({
     Icon = cascade.Symbols.sliderHorizontal3,
 })
 
-local tabParams = section:Tab({
+local tabParameters = section:Tab({
     Selected = false,
     Title = "Параметры",
     Icon = cascade.Symbols.gear,
 })
 
-local tabInfo = section:Tab({
+local tabAbout = section:Tab({
     Selected = false,
-    Title = "Инфо",
+    Title = "О модуле",
     Icon = cascade.Symbols.infoCircle,
 })
 
@@ -399,128 +190,148 @@ local function titledRow(parent, title, subtitle)
     return row
 end
 
--- TAB 1: Refraction Controls (With user's exact preset)
+-- ВКЛАДКА 1: Преломление
 do
     local form = tabRefraction:Form()
 
-    local rowCorner = titledRow(form, "Преломление углов", "Сила искажения линзы на углах окна [ - / + ]")
+    local rowCorner = titledRow(form, "Преломление углов", "Сила оптического искажения линз на скруглениях [ - / + ]")
     rowCorner:Right():Stepper({
         Minimum = 0.5,
         Maximum = 6.0,
         Step = 0.1,
         Fielded = true,
-        Value = Settings.CornerRefraction,
+        Value = glass.Config.CornerRefraction,
         ValueChanged = function(self, val)
-            Settings.CornerRefraction = tonumber(string.format("%.2f", val))
-            updateLiquidGlass()
+            glass.Config.CornerRefraction = tonumber(string.format("%.2f", val))
+            glass:Update(0)
         end,
     })
 
-    local rowRadius = titledRow(form, "Радиус скругления (Corner Radius)", "Границы скруглений окна и линзы (px) [ - / + ]")
+    local rowRadius = titledRow(form, "Радиус углов", "Скругление углов окна и базовый радиус линзы (px) [ - / + ]")
     rowRadius:Right():Stepper({
         Minimum = 12,
         Maximum = 50,
         Step = 1,
         Fielded = true,
-        Value = Settings.CornerRadius,
+        Value = glass.Config.CornerRadius,
         ValueChanged = function(self, val)
-            Settings.CornerRadius = math.floor(val)
-            if uiCorner then
-                uiCorner.CornerRadius = UDim.new(0, Settings.CornerRadius)
-            end
-            updateLiquidGlass()
+            glass.Config.CornerRadius = math.floor(val)
+            glass:Update(0)
         end,
     })
 
-    local rowFrost = titledRow(form, "Размытие стекла (Frost Blur)", "Локальный блюр только под окном (без размытия экрана) [ - / + ]")
+    local rowRim = titledRow(form, "Ширина фаски / Rim", "Толщина оптической каймы преломления [ - / + ]")
+    rowRim:Right():Stepper({
+        Minimum = 1.0,
+        Maximum = 4.0,
+        Step = 0.1,
+        Fielded = true,
+        Value = glass.Config.RimScale,
+        ValueChanged = function(self, val)
+            glass.Config.RimScale = tonumber(string.format("%.2f", val))
+            glass:Update(0)
+        end,
+    })
+
+    local rowFrost = titledRow(form, "Матовый блюр (Frost)", "Локальное размытие под окном без замыливания экрана [ - / + ]")
     rowFrost:Right():Stepper({
         Minimum = 0.0,
         Maximum = 1.0,
         Step = 0.05,
         Fielded = true,
-        Value = Settings.FrostBlur,
+        Value = glass.Config.FrostBlur,
         ValueChanged = function(self, val)
-            Settings.FrostBlur = tonumber(string.format("%.2f", val))
-            updateLiquidGlass()
+            glass.Config.FrostBlur = tonumber(string.format("%.2f", val))
+            glass:Update(0)
         end,
     })
 
-    local rowEdge = titledRow(form, "Преломление граней", "Сила преломления боковых сторон и ребер")
+    local rowEdge = titledRow(form, "Преломление граней", "Коэффициент преломления вдоль прямых сторон окна")
     rowEdge:Right():Stepper({
         Minimum = 0.5,
         Maximum = 5.0,
         Step = 0.1,
         Fielded = true,
-        Value = Settings.EdgeRefraction,
+        Value = glass.Config.EdgeRefraction,
         ValueChanged = function(self, val)
-            Settings.EdgeRefraction = tonumber(string.format("%.2f", val))
-            updateLiquidGlass()
+            glass.Config.EdgeRefraction = tonumber(string.format("%.2f", val))
+            glass:Update(0)
         end,
     })
 
-    local rowToggle = titledRow(form, "Эффект Liquid Glass", "Включение / отключение физического преломления и размытия")
+    local rowToggle = titledRow(form, "Эффект жидкого стекла", "Включить / отключить 3D-меши преломления и матовый блюр")
     rowToggle:Right():Toggle({
-        Value = Settings.Enabled,
+        Value = glass.Config.Enabled,
         ValueChanged = function(self, val)
-            Settings.Enabled = val
-            updateLiquidGlass()
+            glass:SetEnabled(val)
         end,
     })
 end
 
--- TAB 2: Parameters
+-- ВКЛАДКА 2: Параметры
 do
-    local form = tabParams:Form()
+    local form = tabParameters:Form()
 
-    local rowInset = titledRow(form, "Blur Kernel Inset", "Отступ носителя размытия от краев для устранения ореола")
+    local rowInset = titledRow(form, "Отступ блюра (Kernel Inset)", "Защитный внутренний отступ для предотвращения ореола размытия")
     rowInset:Right():Stepper({
         Minimum = 20,
         Maximum = 60,
         Step = 2,
         Fielded = true,
-        Value = Settings.BlurKernelInset,
+        Value = glass.Config.BlurKernelInset,
         ValueChanged = function(self, val)
-            Settings.BlurKernelInset = math.floor(val)
-            updateLiquidGlass()
+            glass.Config.BlurKernelInset = math.floor(val)
+            glass:Update(0)
         end,
     })
 
-    local rowOpacity = titledRow(form, "Прозрачность окна", "Общая прозрачность единого монолитного темного стекла")
+    local rowOpacity = titledRow(form, "Прозрачность окна", "Базовая прозрачность обсидианового тела окна")
     rowOpacity:Right():Stepper({
         Minimum = 0.1,
         Maximum = 0.95,
         Step = 0.05,
         Fielded = true,
-        Value = Settings.WindowTransparency,
+        Value = windowTransparency,
         ValueChanged = function(self, val)
-            Settings.WindowTransparency = tonumber(string.format("%.2f", val))
+            windowTransparency = tonumber(string.format("%.2f", val))
             applyTranslucency()
         end,
     })
 
-    local rowHighlight = titledRow(form, "Highlight Boost", "Прозрачность окантовки отражения (по умолчанию 0.98)")
+    local rowHighlight = titledRow(form, "Яркость канта (Highlight)", "Прозрачность светоотражающей каймы (по умолчанию: 1.00)")
     rowHighlight:Right():Stepper({
         Minimum = 0.8,
         Maximum = 1.0,
         Step = 0.01,
         Fielded = true,
-        Value = Settings.HighlightBoost,
+        Value = glass.Config.HighlightBoost,
         ValueChanged = function(self, val)
-            Settings.HighlightBoost = tonumber(string.format("%.2f", val))
-            highlight.FillTransparency = Settings.HighlightBoost
+            glass.Config.HighlightBoost = tonumber(string.format("%.2f", val))
+            glass:Update(0)
+        end,
+    })
+
+    local rowPhysics = titledRow(form, "Физика желе (Jelly Drag)", "Органическое покачивание окна при перетаскивании курсором")
+    rowPhysics:Right():Toggle({
+        Value = glass.Config.JellyPhysics,
+        ValueChanged = function(self, val)
+            glass.Config.JellyPhysics = val
+            if not val then
+                body.Rotation = 0
+            end
         end,
     })
 end
 
--- TAB 3: Info
+-- ВКЛАДКА 3: О модуле
 do
-    local form = tabInfo:Form()
+    local form = tabAbout:Form()
 
-    local rowStatus = titledRow(form, "Статус интеграции", "macOS Liquid Glass с увеличенными скруглениями 26px активен")
+    local rowStatus = titledRow(form, "Статус подключения", "Библиотека LiquidGlass успешно загружена из репозитория GitHub")
     rowStatus:Right():Button({
-        Label = "ОК",
+        Label = "Проверено",
         Pushed = function()
-            print("[Cascade] macOS Liquid Glass loaded successfully!")
+            print("[Cascade] LiquidGlass.luau успешно подключен из сурсов GitHub!")
         end,
     })
 end
@@ -528,4 +339,4 @@ end
 task.delay(0.1, applyTranslucency)
 task.delay(0.5, applyTranslucency)
 
-print("[Cascade] Unified Authentic macOS Liquid Glass Loaded!")
+print("[Cascade] Аутентичное жидкое стекло macOS подключено через сурсы GitHub!")
