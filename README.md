@@ -14,36 +14,24 @@
 
 ## 📖 Как использовать (Руководство)
 
-Все исходные файлы проекта доступны в официальном репозитории:  
+Все исходные файлы библиотеки доступны в официальном репозитории:  
 🔗 **[https://github.com/Quad-z/Cascade-Liquid-Glass](https://github.com/Quad-z/Cascade-Liquid-Glass)**
 
-### Вариант 1: Быстрый запуск чита с Ключ-системой (Key System)
-Запускает стильную ключ-систему (две капли с кнопкой копирования Linkify и полем ввода ключа):
+### Вариант 1: Быстрый запуск готового интерфейса (Loadstring)
 
-```luau
-loadstring(game:HttpGet("https://raw.githubusercontent.com/Quad-z/Cascade-Liquid-Glass/main/examples/KeySystem.lua"))()
-```
-* При клике на иконку копирования копируется ссылка Linkify (`https://go.linkify.ru/2K8S`).
-* Валидный ключ: `QUADD-JKOS2LD36-2026-2S`.
-* После ввода ключа автоматически открывается главное окно чита.
-
----
-
-### Вариант 2: Прямой запуск Cascade Liquid Glass UI (Без ключа)
-
-#### Английская версия:
+#### Английская версия (English):
 ```luau
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Quad-z/Cascade-Liquid-Glass/main/examples/CascadeExample.luau"))()
 ```
 
-#### Русская версия:
+#### Русская версия (Русский язык):
 ```luau
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Quad-z/Cascade-Liquid-Glass/main/examples/CascadeExample_RU.luau"))()
 ```
 
 ---
 
-### Вариант 3: Подключение модуля `LiquidGlass` к любому своему окну
+### Вариант 2: Подключение модуля `LiquidGlass` к любому своему окну
 
 Вы можете наложить эффект настоящего жидкого стекла с блюром на **любой** `Frame` или `CanvasGroup`:
 
@@ -90,7 +78,6 @@ Cascade-Liquid-Glass/
 ├── dist/
 │   └── bundle.luau                 # Полный автономный бандл библиотеки
 ├── examples/
-│   ├── KeySystem.lua               # Минималистичная ключ-система с Linkify
 │   ├── CascadeExample.luau         # Главный демонстрационный интерфейс (EN)
 │   ├── CascadeExample_RU.luau      # Демонстрационный интерфейс на русском (RU)
 │   └── WindUI_LiquidGlass.luau     # Пример интеграции с WindUI
